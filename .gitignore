@@ -1,0 +1,20 @@
+# Python virtual environments
+ml-service/.venv/
+ml-service/.venv_broken/
+venv/
+.venv/
+
+# Python generated files
+__pycache__/
+*.py[cod]
+
+# Node dependencies and build output
+node_modules/
+client/node_modules/
+server/node_modules/
+client/dist/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example

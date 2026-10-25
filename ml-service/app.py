@@ -66,7 +66,34 @@ def load_model():
 
 load_model()
 
+# EMAIL MODEL LOADING
+EMAIL_MODEL_DIR = MODEL_DIR / "email_model"
+EMAIL_MODEL_PATH = EMAIL_MODEL_DIR / "phishing_svm_model.pkl"
+EMAIL_VECTORIZER_PATH = EMAIL_MODEL_DIR / "tfidf_vectorizer.pkl"
 
+email_model = None
+email_tfidf = None
+
+
+def load_email_model():
+    global email_model, email_tfidf
+
+    if not EMAIL_MODEL_PATH.exists():
+        print("ERROR: Email model not found:", EMAIL_MODEL_PATH)
+        return
+
+    if not EMAIL_VECTORIZER_PATH.exists():
+        print("ERROR: Email vectorizer not found:", EMAIL_VECTORIZER_PATH)
+        return
+
+    email_model = joblib.load(EMAIL_MODEL_PATH)
+    email_tfidf = joblib.load(EMAIL_VECTORIZER_PATH)
+
+    print("Email phishing model loaded successfully")
+    print("Email TF-IDF vectorizer loaded successfully")
+
+
+load_email_model()
 # ==========================================
 # FASTAPI
 # ==========================================
@@ -349,4 +376,121 @@ def predict(request: MessageRequest):
         "signals": signals,
 
         "cleaned_message": cleaned_message
+    }
+
+# ==========================================
+# EMAIL PHISHING DETECTION
+# ==========================================
+
+class EmailRequest(BaseModel):
+    email: str = Field(
+        min_length=1,
+        max_length=200000
+    )
+
+
+def preprocess_email(text: str) -> str:
+    """
+    Preprocessing used for the email dataset.
+    Keep this consistent with the Colab training pipeline.
+    """
+    import re
+
+    text = str(text).lower()
+
+    # Replace URLs and email addresses with placeholders
+    text = re.sub(r'https?://\S+|www\.\S+', ' URL ', text)
+    text = re.sub(
+        r'\b[\w\.-]+@[\w\.-]+\.\w+\b',
+        ' EMAIL ',
+        text
+    )
+
+    # Remove HTML tags and normalize text
+    text = re.sub(r'<.*?>', ' ', text)
+    text = re.sub(r'[^a-zA-Z0-9\s]', ' ', text)
+    text = re.sub(r'\s+', ' ', text).strip()
+
+    return text
+
+
+@app.post("/email/predict")
+def predict_email(request: EmailRequest):
+
+    # Check that the email model has loaded
+    if email_model is None or email_tfidf is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Email model or TF-IDF vectorizer not loaded."
+        )
+
+    original_email = request.email.strip()
+
+    if not original_email:
+        raise HTTPException(
+            status_code=400,
+            detail="Please enter an email."
+        )
+
+    # Step 1: Preprocess the email
+    cleaned_email = preprocess_email(original_email)
+
+    # Step 2: Convert text using the EMAIL vectorizer
+    features = email_tfidf.transform([cleaned_email])
+
+    # Step 3: Predict using the EMAIL Linear SVM
+    prediction = int(email_model.predict(features)[0])
+
+    # Step 4: Build basic explanation signals
+    lower = original_email.lower()
+    signals = []
+
+    urgent_words = [
+        "urgent", "immediately", "act now",
+        "verify now", "limited time", "suspended"
+    ]
+
+    if any(word in lower for word in urgent_words):
+        signals.append("Urgent or threatening language detected")
+
+    sensitive_words = [
+        "password", "account", "bank", "otp",
+        "credit card", "payment", "verify your identity"
+    ]
+
+    if any(word in lower for word in sensitive_words):
+        signals.append("Sensitive information may be requested")
+
+    if any(word in lower for word in [
+        "http://", "https://", "www.", "bit.ly", "tinyurl"
+    ]):
+        signals.append("Contains a link")
+
+    reward_words = [
+        "winner", "prize", "cash reward",
+        "claim your", "congratulations"
+    ]
+
+    if any(word in lower for word in reward_words):
+        signals.append("Prize or reward language detected")
+
+    if not signals:
+        signals.append("No obvious suspicious text signals detected")
+
+    # Step 5: Return prediction
+    # LinearSVC does not provide predict_proba() by default.
+    # Do not present its decision score as a probability.
+    if prediction == 1:
+        label = "phishing"
+        display_label = "Phishing"
+    else:
+        label = "legitimate"
+        display_label = "Legitimate"
+
+    return {
+        "label": label,
+        "prediction": display_label,
+        "signals": signals,
+        "cleaned_email": cleaned_email,
+        "model": "Linear SVM"
     }

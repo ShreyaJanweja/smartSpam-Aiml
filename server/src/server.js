@@ -95,7 +95,44 @@ app.post("/api/predict", async (req, res) => {
     });
   }
 });
+app.post("/api/predict", async (req, res) => {
+  // Your existing SMS prediction code
+});
+// Email phishing detection — separate from SMS detection
+app.post("/api/email/predict", async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (typeof email !== "string" || !email.trim()) {
+      return res.status(400).json({
+        message: "Please enter an email."
+      });
+    }
+
+    const response = await fetch(`${ML_SERVICE_URL}/email/predict`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ email: email.trim() })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return res.status(response.status).json(data);
+    }
+
+    return res.json(data);
+  } catch (error) {
+    return res.status(500).json({
+      message: "Email prediction service is unavailable.",
+      error: error.message
+    });
+  }
+});
 
 app.listen(PORT, () => {
   console.log(`SmartSpam backend running on http://localhost:${PORT}`);
 });
+
