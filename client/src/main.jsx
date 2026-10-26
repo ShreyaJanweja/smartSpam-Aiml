@@ -12,7 +12,8 @@ import {
   Link2,
   LockKeyhole,
   Menu,
-  X
+  X,
+  Mail
 } from "lucide-react";
 import "./styles.css";
 
@@ -39,6 +40,7 @@ function Navbar({ page, setPage }) {
       <nav className={open ? "nav-links mobile-open" : "nav-links"}>
         <button className={page === "home" ? "active" : ""} onClick={() => go("home")}>Home</button>
         <button className={page === "detector" ? "active" : ""} onClick={() => go("detector")}>Detector</button>
+        <button className={page === "email" ? "active" : ""} onClick={() => go("email")}> Email Detection</button>
         <button className={page === "dashboard" ? "active" : ""} onClick={() => go("dashboard")}>Dashboard</button>
         <button className={page === "history" ? "active" : ""} onClick={() => go("history")}>History</button>
       </nav>
@@ -220,6 +222,160 @@ function Detector({ result, setResult }) {
   );
 }
 
+
+function EmailDetection() {
+  const [email, setEmail] = useState("");
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const analyzeEmail = async () => {
+    if (!email.trim()) {
+      setError("Please paste an email before analyzing.");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    setResult(null);
+
+    try {
+      const { data } = await API.post("/email/predict", {
+        email: email.trim()
+      });
+
+      setResult(data);
+    } catch (err) {
+      setError(
+        err.response?.data?.detail ||
+        err.response?.data?.message ||
+        "Could not connect to the email detection service."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const isPhishing = result?.label === "phishing";
+
+  return (
+    <main className="page">
+      <div className="page-heading">
+        <p className="eyebrow">EMAIL DETECTION / 05</p>
+        <h1>Check an email before you trust it.</h1>
+        <p>
+          Paste the contents of an email to check for potential phishing
+          using your trained Linear SVM model.
+        </p>
+      </div>
+
+      <section className="detector-grid">
+        <div className="input-card">
+          <div className="card-top">
+            <div><Mail size={18} /> Email content</div>
+            <span>PHISHING CHECK</span>
+          </div>
+
+          <textarea
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Paste the email subject and body here..."
+            rows={11}
+          />
+
+          <div className="input-footer">
+            <span>{email.length} characters</span>
+            <button
+              className="primary-btn large"
+              onClick={analyzeEmail}
+              disabled={loading || !email.trim()}
+            >
+              {loading ? "Analyzing..." : "Analyze email"}
+              {!loading && <ArrowUpRight size={18} />}
+            </button>
+          </div>
+
+          {error && (
+            <div className="error-box">
+              <XCircle size={17} />
+              {error}
+            </div>
+          )}
+
+          <div className="examples">
+            <span>Try an example:</span>
+            <button
+              onClick={() =>
+                setEmail(
+                  "URGENT: Your bank account has been suspended. " +
+                  "Click https://example.com to verify your password immediately."
+                )
+              }
+            >
+              Suspicious email
+            </button>
+            <button
+              onClick={() =>
+                setEmail(
+                  "Hi team, the meeting is scheduled for 3 PM tomorrow. " +
+                  "Please review the attached agenda before joining. Thanks."
+                )
+              }
+            >
+              Normal email
+            </button>
+          </div>
+        </div>
+
+        <div className={`result-card ${result ? "" : "empty"}`}>
+          {!result ? (
+            <>
+              <div className="empty-icon"><Activity size={25} /></div>
+              <h2>Email analysis result</h2>
+              <p>
+                Your model's prediction and detected warning signals
+                will appear here.
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="card-top">
+                <div><Activity size={18} /> ANALYSIS RESULT</div>
+                <span>LINEAR SVM</span>
+              </div>
+
+              <div className="result-status">
+                <span className="muted">Classification</span>
+                <h2 className={isPhishing ? "danger" : "safe"}>
+                  {isPhishing ? "Potential phishing" : "Likely legitimate"}
+                </h2>
+              </div>
+
+              <div className="signals">
+                <div className="signal-title">
+                  <AlertTriangle size={16} />
+                  Detected signals
+                </div>
+                <div className="chips">
+                  {(result.signals || []).map((signal, index) => (
+                    <span key={`${signal}-${index}`}>{signal}</span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="model-note">
+                <LockKeyhole size={15} />
+                Classification generated by your trained email Linear SVM
+                model. This result is an indication, not a guarantee.
+              </div>
+            </>
+          )}
+        </div>
+      </section>
+    </main>
+  );
+}
+
 function ResultCard({ result }) {
   if (!result) {
     return (
@@ -388,6 +544,7 @@ function App() {
       <Navbar page={page} setPage={setPage} />
       {page === "home" && <Home setPage={setPage} />}
       {page === "detector" && <Detector result={result} setResult={setResult} />}
+      {page === "email" && <EmailDetection />}
       {page === "dashboard" && <Dashboard result={result} />}
       {page === "history" && <History />}
       <footer>

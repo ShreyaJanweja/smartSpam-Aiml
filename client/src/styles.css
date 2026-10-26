@@ -44,6 +44,9 @@ button { cursor: pointer; }
   z-index: 20;
   backdrop-filter: blur(16px);
 }
+.result-status h2 {
+  overflow-wrap: anywhere;
+}
 
 .brand {
   display: flex;
